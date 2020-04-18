@@ -1,0 +1,3 @@
+(executable
+ (name jupyter_async_kernel)
+ (libraries core jupyter_async))

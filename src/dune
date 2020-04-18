@@ -1,0 +1,9 @@
+(library
+  (name jupyter_async)
+  (public_name jupyter-async)
+  (libraries
+    async
+    base
+  )
+  (preprocess (pps ppx_let ppx_sexp_conv ppx_yojson_conv))
+)
