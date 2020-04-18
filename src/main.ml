@@ -205,7 +205,7 @@ let iopub_loop t ~context =
   loop ()
 
 let stdin_loop t ~context =
-  let socket = zmq_socket t `stdin ~context ~kind:Zmq.Socket.pub in
+  let socket = zmq_socket t `stdin ~context ~kind:Zmq.Socket.router in
   let rec loop () =
     let%bind msg = Zmq_async.Socket.recv socket in
     Core.printf "Received stdin message: %s\n%!" msg;
