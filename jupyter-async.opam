@@ -26,6 +26,7 @@ depends: [
   "ppx_let"
   "ppx_yojson_conv_lib"
   "stdio"
+  "uuidm"
   "yojson"
   "zmq"
   "zmq-async"

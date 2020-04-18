@@ -21,7 +21,7 @@ module Message = struct
       { msg_id : string
       ; session : string
       ; username : string
-      ; date : string
+      ; date : string option [@yojson.option]
       ; msg_type : string
       ; version : string
       }
@@ -56,6 +56,24 @@ module Message = struct
       ; help_links : help_link list
       }
     [@@deriving yojson]
+
+    let default () =
+      { status = "ok"
+      ; protocol_version = "5.3"
+      ; implementation = "ocaml-jupyter-async"
+      ; implementation_version = "1.0"
+      ; language_info =
+          { name = "ocaml"
+          ; version = Sys.ocaml_version
+          ; mimetype = "text/x-ocaml"
+          ; file_extension = ".ml"
+          ; pygments_lexer = None
+          ; codemirror_mode = None
+          ; nbconvert_exporter = None
+          }
+      ; banner = "ocaml " ^ Sys.ocaml_version
+      ; help_links = []
+      }
   end
 
   type t =
@@ -88,6 +106,18 @@ module Message = struct
       ; buffers
       }
     | _ -> failwithf "not enough parts in message (%d)" (List.length tail) ()
+
+  let send t socket ~key =
+    let { ids; header; parent_header; metadata; content; buffers } = t in
+    let header = Header.yojson_of_t header |> Yojson.Safe.to_string in
+    let parent_header = Yojson.Safe.to_string parent_header in
+    let metadata = Yojson.Safe.to_string metadata in
+    let content = Yojson.Safe.to_string content in
+    let hmac = Hmac.hmac ~key ~header ~parent_header ~metadata ~content in
+    Zmq_async.Socket.send_all
+      socket
+      (ids
+      @ (delimiter :: hmac :: header :: parent_header :: metadata :: content :: buffers))
 end
 
 type t =
@@ -135,11 +165,32 @@ let control_loop t ~context =
   in
   loop ()
 
+let handle_shell t (msg : Message.t) ~socket =
+  match msg.header.msg_type with
+  | "kernel_info_request" ->
+    let msg =
+      { Message.ids = msg.ids
+      ; header =
+          { msg.header with
+            msg_id = Uuid_unix.create () |> Uuid.to_string
+          ; msg_type = "kernel_info_reply"
+          }
+      ; parent_header = msg.header |> Message.Header.yojson_of_t
+      ; metadata = `Assoc []
+      ; content = Message.Kernel_info_reply_content.(default () |> yojson_of_t)
+      ; buffers = []
+      }
+    in
+    Log.Global.debug "sending kernel_info_reply";
+    Message.send msg socket ~key:t.key
+  | _ -> Deferred.unit
+
 let shell_loop t ~context =
   let socket = zmq_socket t `shell ~context ~kind:Zmq.Socket.router in
   let rec loop () =
     let%bind msg = Message.read socket ~key:t.key in
     Log.Global.debug_s ~tags:[ "kind", "shell" ] (Message.sexp_of_t msg);
+    let%bind () = handle_shell t msg ~socket in
     loop ()
   in
   loop ()

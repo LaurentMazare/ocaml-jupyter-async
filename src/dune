@@ -5,6 +5,7 @@
     async
     base
     cryptokit
+    uuidm
     zmq-async
   )
   (preprocess (pps ppx_let ppx_sexp_conv ppx_yojson_conv))
