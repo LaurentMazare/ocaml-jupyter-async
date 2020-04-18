@@ -4,6 +4,8 @@
   (libraries
     async
     base
+    cryptokit
+    zmq-async
   )
   (preprocess (pps ppx_let ppx_sexp_conv ppx_yojson_conv))
 )

@@ -27,3 +27,4 @@ setup.log
 _opam/
 
 */.merlin
+.ipynb_checkpoints
