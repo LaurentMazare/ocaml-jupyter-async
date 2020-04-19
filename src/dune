@@ -4,6 +4,7 @@
   (libraries
     async
     base
+    compiler-libs.toplevel
     cryptokit
     uuidm
     zmq-async

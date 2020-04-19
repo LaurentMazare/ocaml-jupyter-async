@@ -4,6 +4,15 @@ open Async
 module Message = struct
   let delimiter = "<IDS|MSG>"
 
+  type 'a json_assoc = (string * 'a) list [@@deriving sexp]
+
+  let json_assoc_of_yojson of_yojson = function
+    | `Assoc l -> List.map l ~f:(fun (key, value) -> key, of_yojson value)
+    | _other -> failwith "expected an Assoc"
+
+  let yojson_of_json_assoc yojson_of l =
+    `Assoc (List.map l ~f:(fun (name, value) -> name, yojson_of value))
+
   module Hmac = struct
     let hexa_encode = Cryptokit.Hexa.encode ()
 
@@ -25,7 +34,7 @@ module Message = struct
       ; msg_type : string
       ; version : string
       }
-    [@@deriving sexp_of, yojson]
+    [@@deriving sexp_of, yojson] [@@yojson.allow_extra_fields]
   end
 
   module Kernel_info_reply_content = struct
@@ -74,6 +83,27 @@ module Message = struct
       ; banner = "ocaml " ^ Sys.ocaml_version
       ; help_links = []
       }
+  end
+
+  module Execute_request_content = struct
+    type t =
+      { code : string
+      ; silent : bool [@default false]
+      ; store_history : bool option [@yojson.option]
+      ; user_expressions : string json_assoc
+      ; allow_stdin : bool
+      ; stop_on_error : bool
+      }
+    [@@deriving sexp, yojson] [@@yojson.allow_extra_fields]
+  end
+
+  module Execute_reply_content = struct
+    type t =
+      { status : string
+      ; execution_count : int
+      ; user_expressions : string json_assoc option [@yojson.option]
+      }
+    [@@deriving sexp, yojson] [@@yojson.allow_extra_fields]
   end
 
   type t =
@@ -156,6 +186,7 @@ type t =
   ; shell_socket : [ `Router ] Zmq_async.Socket.t
   ; stdin_socket : [ `Router ] Zmq_async.Socket.t
   ; iopub_socket : [ `Router ] Zmq_async.Socket.t
+  ; mutable execution_count : int
   }
 
 let close t =
@@ -181,26 +212,50 @@ let control_loop t =
   loop ()
 
 let handle_shell t (msg : Message.t) =
-  match msg.header.msg_type with
-  | "kernel_info_request" ->
+  let send_reply_msg ~msg_type ~content =
     let msg =
       { Message.ids = msg.ids
       ; header =
-          { msg.header with
-            msg_id = Uuid_unix.create () |> Uuid.to_string
-          ; msg_type = "kernel_info_reply"
-          }
+          { msg.header with msg_id = Uuid_unix.create () |> Uuid.to_string; msg_type }
       ; parent_header = msg.header |> Message.Header.yojson_of_t
       ; metadata = `Assoc []
-      ; content = Message.Kernel_info_reply_content.(default () |> yojson_of_t)
+      ; content
       ; buffers = []
       }
     in
-    Log.Global.debug "sending kernel_info_reply";
+    Log.Global.debug "sending %s reply" msg_type;
     Message.send msg t.shell_socket ~key:t.config.key
+  in
+  match msg.header.msg_type with
+  | "kernel_info_request" ->
+    send_reply_msg
+      ~msg_type:"kernel_info_reply"
+      ~content:Message.Kernel_info_reply_content.(default () |> yojson_of_t)
+  | "comm_info_request" ->
+    send_reply_msg ~msg_type:"comm_info_reply" ~content:(`Assoc [ "comms", `Assoc [] ])
   | "shutdown_request" ->
+    let%bind () = send_reply_msg ~msg_type:"shutdown_reply" ~content:msg.content in
     let%map () = close t in
     Async.shutdown 0
+  | "execute_request" ->
+    let execute_request = Message.Execute_request_content.t_of_yojson msg.content in
+    Log.Global.debug_s (Message.Execute_request_content.sexp_of_t execute_request);
+    (* For now use the toploop in the same process. This may not work well as
+       calls are likely to be blocking if we want to allow Async computations in
+       the executed code.  *)
+    let (reply : Message.Execute_reply_content.t) =
+      match Ocaml_toploop.toploop_eval execute_request.code ~verbose:true with
+      | Ok () ->
+        t.execution_count <- t.execution_count + 1;
+        { status = "ok"; execution_count = t.execution_count; user_expressions = Some [] }
+      | Error err ->
+        Log.Global.debug "error in toploop: %s" (Error.to_string_hum err);
+        (* Support aborted ? *)
+        { status = "error"; execution_count = t.execution_count; user_expressions = None }
+    in
+    send_reply_msg
+      ~msg_type:"execute_reply"
+      ~content:(Message.Execute_reply_content.yojson_of_t reply)
   | _ -> Deferred.unit
 
 let shell_loop t =
@@ -243,6 +298,7 @@ let run config =
     ; shell_socket = Config.socket config `shell ~context ~kind:Zmq.Socket.router
     ; stdin_socket = Config.socket config `stdin ~context ~kind:Zmq.Socket.router
     ; iopub_socket = Config.socket config `iopub ~context ~kind:Zmq.Socket.router
+    ; execution_count = 0
     }
   in
   Deferred.all_unit
