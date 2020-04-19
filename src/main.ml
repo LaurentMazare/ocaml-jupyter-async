@@ -1,6 +1,9 @@
 open Core
 open Async
 
+let buf_len = 4096
+let protocol_version = "5.3"
+
 module Message = struct
   let delimiter = "<IDS|MSG>"
 
@@ -68,7 +71,7 @@ module Message = struct
 
     let default () =
       { status = "ok"
-      ; protocol_version = "5.3"
+      ; protocol_version
       ; implementation = "ocaml-jupyter-async"
       ; implementation_version = "1.0"
       ; language_info =
@@ -246,6 +249,7 @@ type t =
   ; stdin_socket : [ `Router ] Zmq_async.Socket.t
   ; iopub_socket : [ `Pub ] Zmq_async.Socket.t
   ; mutable execution_count : int
+  ; mutable last_parent_header : Message.Header.t option
   ; worker : Worker.t
   }
 
@@ -299,6 +303,7 @@ let handle_shell t (msg : Message.t) =
     let%map () = close t in
     Async.shutdown 0
   | "execute_request" ->
+    t.last_parent_header <- Some msg.header;
     let execute_request = Message.Execute_request_content.t_of_yojson msg.content in
     Log.Global.debug_s (Message.Execute_request_content.sexp_of_t execute_request);
     let%bind () =
@@ -363,6 +368,35 @@ let stdin_loop t =
   in
   loop ()
 
+let redirect_loop t which ~reader =
+  let buf = Bytes.create buf_len in
+  let rec loop () =
+    let%bind bytes_read = Reader.read reader buf in
+    match bytes_read with
+    | `Eof -> Deferred.unit
+    | `Ok bytes_read ->
+      let%bind () =
+        match t.last_parent_header with
+        | None -> Deferred.unit
+        | Some parent_header ->
+          let text = Bytes.sub buf ~pos:0 ~len:bytes_read |> Bytes.to_string in
+          Message.send
+            (Message.stream which text ~parent_header)
+            t.iopub_socket
+            ~key:t.config.key
+      in
+      loop ()
+  in
+  loop ()
+
+let stdout_loop t =
+  let reader = Worker.stdout_reader t.worker in
+  redirect_loop t Stdout ~reader
+
+let stderr_loop t =
+  let reader = Worker.stderr_reader t.worker in
+  redirect_loop t Stderr ~reader
+
 let register_printer () =
   Caml.Printexc.register_printer (function
       | Ppx_yojson_conv_lib.Yojson_conv.Of_yojson_error (exn, _) ->
@@ -382,10 +416,18 @@ let run config =
     ; iopub_socket = Config.socket config `iopub ~context ~kind:Zmq.Socket.pub
     ; execution_count = 0
     ; worker
+    ; last_parent_header = None
     }
   in
   Deferred.all_unit
-    [ hb_loop t; control_loop t; shell_loop t; iopub_loop t; stdin_loop t ]
+    [ hb_loop t
+    ; control_loop t
+    ; shell_loop t
+    ; iopub_loop t
+    ; stdin_loop t
+    ; stdout_loop t
+    ; stderr_loop t
+    ]
 
 let command =
   Core.Command.basic

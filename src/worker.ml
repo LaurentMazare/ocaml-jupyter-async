@@ -10,8 +10,10 @@ type worker_output = unit Or_error.t [@@deriving bin_io]
 
 type t =
   { pid : Pid.t
-  ; reader : Reader.t
-  ; writer : Writer.t
+  ; reader : Async.Reader.t
+  ; stdout_reader : Async.Reader.t
+  ; stderr_reader : Async.Reader.t
+  ; writer : Async.Writer.t
   }
 
 let worker ~worker_in_read ~worker_out_write =
@@ -19,12 +21,20 @@ let worker ~worker_in_read ~worker_out_write =
     Unpack_buffer.Unpack_one.create_bin_prot bin_reader_worker_input
     |> Unpack_buffer.create
   in
-  let in_channel = Core.Unix.in_channel_of_descr worker_in_read in
-  let out_channel = Core.Unix.out_channel_of_descr worker_out_write in
+  let in_channel = Unix.in_channel_of_descr worker_in_read in
+  let out_channel = Unix.out_channel_of_descr worker_out_write in
   let on_input { code } =
     let result = Ocaml_toploop.toploop_eval code ~verbose:true in
-    let result = Bin_prot.Writer.to_string bin_writer_worker_output result in
-    Out_channel.output_value out_channel result
+    (* It is quite inefficient to re-allocate the bigstring but this should be small
+       enough not to be a problem. *)
+    let bigstring =
+      Bigstring.create
+        (Bin_prot.Utils.size_header_length + bin_writer_worker_output.size result)
+    in
+    let _w = Bigstring.write_bin_prot bigstring bin_writer_worker_output result in
+    let result = Bigstring.to_string bigstring in
+    Out_channel.output_string out_channel result;
+    Out_channel.flush out_channel
   in
   let buf = Bytes.create worker_buf_len in
   let rec loop () =
@@ -36,22 +46,33 @@ let worker ~worker_in_read ~worker_out_write =
   loop ()
 
 let spawn () =
-  let worker_in_read, worker_in_write = Core.Unix.pipe () in
-  let worker_out_read, worker_out_write = Core.Unix.pipe () in
+  let worker_in_read, worker_in_write = Unix.pipe () in
+  let worker_out_read, worker_out_write = Unix.pipe () in
+  let stdout_read, stdout_write = Unix.pipe () in
+  let stderr_read, stderr_write = Unix.pipe () in
   (* This has to be called before starting the async scheduler. *)
-  match Core.Unix.fork () with
-  | `In_the_child -> worker ~worker_in_read ~worker_out_write
+  match Unix.fork () with
+  | `In_the_child ->
+    Unix.dup2 ~src:stdout_write ~dst:Unix.stdout;
+    Unix.dup2 ~src:stderr_write ~dst:Unix.stderr;
+    Unix.close stdout_write;
+    Unix.close stderr_write;
+    worker ~worker_in_read ~worker_out_write
   | `In_the_parent pid ->
     let open Async in
-    let worker_out_read =
-      Fd.create Char worker_out_read (Info.of_string "worker-out-read")
+    let stderr_reader =
+      Fd.create Char stderr_read (Info.of_string "stderr-read") |> Reader.create
     in
-    let worker_in_write =
-      Fd.create Char worker_in_write (Info.of_string "worker-in-write")
+    let stdout_reader =
+      Fd.create Char stdout_read (Info.of_string "stdout-read") |> Reader.create
     in
-    let reader = Reader.create worker_out_read in
-    let writer = Writer.create worker_in_write in
-    { pid; reader; writer }
+    let reader =
+      Fd.create Char worker_out_read (Info.of_string "worker-out-read") |> Reader.create
+    in
+    let writer =
+      Fd.create Char worker_in_write (Info.of_string "worker-in-write") |> Writer.create
+    in
+    { pid; reader; writer; stdout_reader; stderr_reader }
 
 let execute t ~code =
   let open Async in
@@ -60,3 +81,6 @@ let execute t ~code =
   match result with
   | `Ok result -> result
   | `Eof -> failwith "unexpected end of file from worker"
+
+let stdout_reader t = t.stdout_reader
+let stderr_reader t = t.stderr_reader
