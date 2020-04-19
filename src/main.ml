@@ -98,8 +98,14 @@ module Message = struct
   end
 
   module Execute_reply_content = struct
+    type status =
+      | Ok [@name "ok"]
+      | Error [@name "error"]
+      | Aborted [@name "aborted"]
+    [@@deriving sexp, yojson]
+
     type t =
-      { status : string
+      { status : status
       ; execution_count : int
       ; user_expressions : string json_assoc option [@yojson.option]
       }
@@ -313,11 +319,11 @@ let handle_shell t (msg : Message.t) =
       match Ocaml_toploop.toploop_eval execute_request.code ~verbose:true with
       | Ok () ->
         t.execution_count <- t.execution_count + 1;
-        { status = "ok"; execution_count = t.execution_count; user_expressions = Some [] }
+        { status = Ok; execution_count = t.execution_count; user_expressions = Some [] }
       | Error err ->
         Log.Global.debug "error in toploop: %s" (Error.to_string_hum err);
         (* Support aborted ? *)
-        { status = "error"; execution_count = t.execution_count; user_expressions = None }
+        { status = Error; execution_count = t.execution_count; user_expressions = None }
     in
     let%bind () =
       send_reply_msg
