@@ -106,6 +106,29 @@ module Message = struct
     [@@deriving sexp, yojson] [@@yojson.allow_extra_fields]
   end
 
+  module Stream_content = struct
+    type name =
+      | Stdout [@name "stdout"]
+      | Stderr [@name "stderr"]
+    [@@deriving sexp, yojson]
+
+    type t =
+      { name : name
+      ; text : string
+      }
+    [@@deriving sexp, yojson]
+  end
+
+  module Status_content = struct
+    type execution_state =
+      | Busy [@name "busy"]
+      | Idle [@name "idle"]
+      | Starting [@name "starting"]
+    [@@deriving sexp, yojson]
+
+    type t = { execution_state : execution_state } [@@deriving sexp, yojson]
+  end
+
   type t =
     { ids : string list
     ; header : Header.t
@@ -148,6 +171,36 @@ module Message = struct
       socket
       (ids
       @ (delimiter :: hmac :: header :: parent_header :: metadata :: content :: buffers))
+
+  let status execution_state ~parent_header =
+    let header =
+      { parent_header with
+        Header.msg_id = Uuid_unix.create () |> Uuid.to_string
+      ; msg_type = "status"
+      }
+    in
+    { ids = [ "kernel-status" ]
+    ; header
+    ; parent_header = Header.yojson_of_t parent_header
+    ; metadata = `Assoc []
+    ; content = Status_content.yojson_of_t { execution_state }
+    ; buffers = []
+    }
+
+  let stream name text ~parent_header =
+    let header =
+      { parent_header with
+        Header.msg_id = Uuid_unix.create () |> Uuid.to_string
+      ; msg_type = "stream"
+      }
+    in
+    { ids = [ "kernel-stream" ]
+    ; header
+    ; parent_header = Header.yojson_of_t parent_header
+    ; metadata = `Assoc []
+    ; content = Stream_content.yojson_of_t { name; text }
+    ; buffers = []
+    }
 end
 
 module Config = struct
@@ -185,15 +238,16 @@ type t =
   ; control_socket : [ `Router ] Zmq_async.Socket.t
   ; shell_socket : [ `Router ] Zmq_async.Socket.t
   ; stdin_socket : [ `Router ] Zmq_async.Socket.t
-  ; iopub_socket : [ `Router ] Zmq_async.Socket.t
+  ; iopub_socket : [ `Pub ] Zmq_async.Socket.t
   ; mutable execution_count : int
   }
 
 let close t =
   let%bind () = Zmq_async.Socket.close t.hb_socket in
+  let%bind () = Zmq_async.Socket.close t.iopub_socket in
   Deferred.List.iter
     ~f:Zmq_async.Socket.close
-    [ t.control_socket; t.shell_socket; t.stdin_socket; t.iopub_socket ]
+    [ t.control_socket; t.shell_socket; t.stdin_socket ]
 
 let hb_loop t =
   let rec loop () =
@@ -240,6 +294,18 @@ let handle_shell t (msg : Message.t) =
   | "execute_request" ->
     let execute_request = Message.Execute_request_content.t_of_yojson msg.content in
     Log.Global.debug_s (Message.Execute_request_content.sexp_of_t execute_request);
+    let%bind () =
+      Message.send
+        (Message.status Busy ~parent_header:msg.header)
+        t.iopub_socket
+        ~key:t.config.key
+    in
+    let%bind () =
+      Message.send
+        (Message.stream Stdout "foobar\n" ~parent_header:msg.header)
+        t.iopub_socket
+        ~key:t.config.key
+    in
     (* For now use the toploop in the same process. This may not work well as
        calls are likely to be blocking if we want to allow Async computations in
        the executed code.  *)
@@ -253,9 +319,15 @@ let handle_shell t (msg : Message.t) =
         (* Support aborted ? *)
         { status = "error"; execution_count = t.execution_count; user_expressions = None }
     in
-    send_reply_msg
-      ~msg_type:"execute_reply"
-      ~content:(Message.Execute_reply_content.yojson_of_t reply)
+    let%bind () =
+      send_reply_msg
+        ~msg_type:"execute_reply"
+        ~content:(Message.Execute_reply_content.yojson_of_t reply)
+    in
+    Message.send
+      (Message.status Idle ~parent_header:msg.header)
+      t.iopub_socket
+      ~key:t.config.key
   | _ -> Deferred.unit
 
 let shell_loop t =
@@ -297,7 +369,7 @@ let run config =
     ; control_socket = Config.socket config `control ~context ~kind:Zmq.Socket.router
     ; shell_socket = Config.socket config `shell ~context ~kind:Zmq.Socket.router
     ; stdin_socket = Config.socket config `stdin ~context ~kind:Zmq.Socket.router
-    ; iopub_socket = Config.socket config `iopub ~context ~kind:Zmq.Socket.router
+    ; iopub_socket = Config.socket config `iopub ~context ~kind:Zmq.Socket.pub
     ; execution_count = 0
     }
   in
