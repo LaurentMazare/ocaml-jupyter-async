@@ -246,6 +246,7 @@ type t =
   ; stdin_socket : [ `Router ] Zmq_async.Socket.t
   ; iopub_socket : [ `Pub ] Zmq_async.Socket.t
   ; mutable execution_count : int
+  ; worker : Worker.t
   }
 
 let close t =
@@ -312,11 +313,12 @@ let handle_shell t (msg : Message.t) =
         t.iopub_socket
         ~key:t.config.key
     in
+    let%bind result = Worker.execute t.worker ~code:execute_request.code in
     (* For now use the toploop in the same process. This may not work well as
        calls are likely to be blocking if we want to allow Async computations in
        the executed code.  *)
     let (reply : Message.Execute_reply_content.t) =
-      match Ocaml_toploop.toploop_eval execute_request.code ~verbose:true with
+      match result with
       | Ok () ->
         t.execution_count <- t.execution_count + 1;
         { status = Ok; execution_count = t.execution_count; user_expressions = Some [] }
@@ -369,6 +371,8 @@ let register_printer () =
 
 let run config =
   let context = Zmq.Context.create () in
+  (* It is import to call this before entering async. *)
+  let worker = Worker.spawn () in
   let t =
     { config
     ; hb_socket = Config.socket config `hb ~context ~kind:Zmq.Socket.rep
@@ -377,13 +381,14 @@ let run config =
     ; stdin_socket = Config.socket config `stdin ~context ~kind:Zmq.Socket.router
     ; iopub_socket = Config.socket config `iopub ~context ~kind:Zmq.Socket.pub
     ; execution_count = 0
+    ; worker
     }
   in
   Deferred.all_unit
     [ hb_loop t; control_loop t; shell_loop t; iopub_loop t; stdin_loop t ]
 
 let command =
-  Command.async
+  Core.Command.basic
     ~summary:"an ocaml kernel for jupyter"
     (let%map_open.Command connection_file =
        flag "-connection-file" (required string) ~doc:"a connection file in json format"
@@ -391,4 +396,6 @@ let command =
      fun () ->
        register_printer ();
        Log.Global.set_level `Debug;
-       Yojson.Safe.from_file connection_file |> Config.t_of_yojson |> run)
+       let run = Yojson.Safe.from_file connection_file |> Config.t_of_yojson |> run in
+       don't_wait_for run;
+       Scheduler.go () |> never_returns)

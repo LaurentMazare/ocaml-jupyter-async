@@ -5,9 +5,10 @@
     async
     base
     compiler-libs.toplevel
+    core_kernel.unpack_buffer
     cryptokit
     uuidm
     zmq-async
   )
-  (preprocess (pps ppx_let ppx_sexp_conv ppx_yojson_conv))
+  (preprocess (pps ppx_bin_prot ppx_let ppx_sexp_conv ppx_yojson_conv))
 )
