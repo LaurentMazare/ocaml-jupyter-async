@@ -120,52 +120,67 @@ module Message = struct
       @ (delimiter :: hmac :: header :: parent_header :: metadata :: content :: buffers))
 end
 
+module Config = struct
+  type t =
+    { control_port : int
+    ; shell_port : int
+    ; transport : string
+    ; signature_scheme : string
+    ; stdin_port : int
+    ; hb_port : int
+    ; ip : string
+    ; iopub_port : int
+    ; key : string
+    }
+  [@@deriving yojson, sexp] [@@yojson.allow_extra_fields]
+
+  let socket t which ~context ~kind =
+    let socket = Zmq.Socket.create context kind in
+    let port =
+      match which with
+      | `hb -> t.hb_port
+      | `control -> t.control_port
+      | `shell -> t.shell_port
+      | `stdin -> t.stdin_port
+      | `iopub -> t.iopub_port
+    in
+    let url = sprintf "%s://%s:%d" t.transport t.ip port in
+    Zmq.Socket.bind socket url;
+    Zmq_async.Socket.of_socket socket
+end
+
 type t =
-  { control_port : int
-  ; shell_port : int
-  ; transport : string
-  ; signature_scheme : string
-  ; stdin_port : int
-  ; hb_port : int
-  ; ip : string
-  ; iopub_port : int
-  ; key : string
+  { config : Config.t
+  ; hb_socket : [ `Rep ] Zmq_async.Socket.t
+  ; control_socket : [ `Router ] Zmq_async.Socket.t
+  ; shell_socket : [ `Router ] Zmq_async.Socket.t
+  ; stdin_socket : [ `Router ] Zmq_async.Socket.t
+  ; iopub_socket : [ `Router ] Zmq_async.Socket.t
   }
-[@@deriving yojson, sexp] [@@yojson.allow_extra_fields]
 
-let zmq_socket t which ~context ~kind =
-  let socket = Zmq.Socket.create context kind in
-  let port =
-    match which with
-    | `heartbeat -> t.hb_port
-    | `control -> t.control_port
-    | `shell -> t.shell_port
-    | `stdin -> t.stdin_port
-    | `iopub -> t.iopub_port
-  in
-  let url = sprintf "%s://%s:%d" t.transport t.ip port in
-  Zmq.Socket.bind socket url;
-  Zmq_async.Socket.of_socket socket
+let close t =
+  let%bind () = Zmq_async.Socket.close t.hb_socket in
+  Deferred.List.iter
+    ~f:Zmq_async.Socket.close
+    [ t.control_socket; t.shell_socket; t.stdin_socket; t.iopub_socket ]
 
-let hb_loop t ~context =
-  let socket = zmq_socket t `heartbeat ~context ~kind:Zmq.Socket.rep in
+let hb_loop t =
   let rec loop () =
-    let%bind msg = Zmq_async.Socket.recv socket in
-    Core.printf "Received heartbeat message: %s\n%!" msg;
+    let%bind msg = Zmq_async.Socket.recv t.hb_socket in
+    Log.Global.debug "Received heartbeat message: %s\n%!" msg;
     loop ()
   in
   loop ()
 
-let control_loop t ~context =
-  let socket = zmq_socket t `control ~context ~kind:Zmq.Socket.router in
+let control_loop t =
   let rec loop () =
-    let%bind msg = Message.read socket ~key:t.key in
+    let%bind msg = Message.read t.control_socket ~key:t.config.key in
     Log.Global.debug_s ~tags:[ "kind", "shell" ] (Message.sexp_of_t msg);
     loop ()
   in
   loop ()
 
-let handle_shell t (msg : Message.t) ~socket =
+let handle_shell t (msg : Message.t) =
   match msg.header.msg_type with
   | "kernel_info_request" ->
     let msg =
@@ -182,33 +197,33 @@ let handle_shell t (msg : Message.t) ~socket =
       }
     in
     Log.Global.debug "sending kernel_info_reply";
-    Message.send msg socket ~key:t.key
+    Message.send msg t.shell_socket ~key:t.config.key
+  | "shutdown_request" ->
+    let%map () = close t in
+    Async.shutdown 0
   | _ -> Deferred.unit
 
-let shell_loop t ~context =
-  let socket = zmq_socket t `shell ~context ~kind:Zmq.Socket.router in
+let shell_loop t =
   let rec loop () =
-    let%bind msg = Message.read socket ~key:t.key in
+    let%bind msg = Message.read t.shell_socket ~key:t.config.key in
     Log.Global.debug_s ~tags:[ "kind", "shell" ] (Message.sexp_of_t msg);
-    let%bind () = handle_shell t msg ~socket in
+    let%bind () = handle_shell t msg in
     loop ()
   in
   loop ()
 
-let iopub_loop t ~context =
-  let socket = zmq_socket t `iopub ~context ~kind:Zmq.Socket.pub in
+let iopub_loop t =
   let rec loop () =
-    let%bind msg = Zmq_async.Socket.recv socket in
-    Core.printf "Received iopub message: %s\n%!" msg;
+    let%bind msg = Zmq_async.Socket.recv t.iopub_socket in
+    Log.Global.debug "Received iopub message: %s\n%!" msg;
     loop ()
   in
   loop ()
 
-let stdin_loop t ~context =
-  let socket = zmq_socket t `stdin ~context ~kind:Zmq.Socket.router in
+let stdin_loop t =
   let rec loop () =
-    let%bind msg = Zmq_async.Socket.recv socket in
-    Core.printf "Received stdin message: %s\n%!" msg;
+    let%bind msg = Zmq_async.Socket.recv t.stdin_socket in
+    Log.Global.debug "Received stdin message: %s\n%!" msg;
     loop ()
   in
   loop ()
@@ -219,15 +234,19 @@ let register_printer () =
         Exn.to_string exn |> Option.some
       | _ -> None)
 
-let run (t : t) =
+let run config =
   let context = Zmq.Context.create () in
+  let t =
+    { config
+    ; hb_socket = Config.socket config `hb ~context ~kind:Zmq.Socket.rep
+    ; control_socket = Config.socket config `control ~context ~kind:Zmq.Socket.router
+    ; shell_socket = Config.socket config `shell ~context ~kind:Zmq.Socket.router
+    ; stdin_socket = Config.socket config `stdin ~context ~kind:Zmq.Socket.router
+    ; iopub_socket = Config.socket config `iopub ~context ~kind:Zmq.Socket.router
+    }
+  in
   Deferred.all_unit
-    [ hb_loop t ~context
-    ; control_loop t ~context
-    ; shell_loop t ~context
-    ; iopub_loop t ~context
-    ; stdin_loop t ~context
-    ]
+    [ hb_loop t; control_loop t; shell_loop t; iopub_loop t; stdin_loop t ]
 
 let command =
   Command.async
@@ -238,4 +257,4 @@ let command =
      fun () ->
        register_printer ();
        Log.Global.set_level `Debug;
-       Yojson.Safe.from_file connection_file |> t_of_yojson |> run)
+       Yojson.Safe.from_file connection_file |> Config.t_of_yojson |> run)
