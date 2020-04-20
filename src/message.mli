@@ -28,13 +28,6 @@ module Execute_reply_content : sig
     | Error
     | Aborted
   [@@deriving sexp, yojson]
-
-  type t =
-    { status : status
-    ; execution_count : int
-    ; user_expressions : (string * string) list option
-    }
-  [@@deriving sexp, yojson]
 end
 
 module Stream_content : sig
@@ -66,5 +59,13 @@ val stream : Stream_content.name -> string -> parent_header:Header.t -> t
 val kernel_info_reply : t -> t
 val comm_info_reply : t -> t
 val shutdown_reply : t -> t
+
+val execute_reply
+  :  t
+  -> status:Execute_reply_content.status
+  -> execution_count:int
+  -> user_expressions:(string * string) list option
+  -> t
+
 val read : _ Zmq_async.Socket.t -> key:string -> t Async.Deferred.t
 val send : t -> _ Zmq_async.Socket.t -> key:string -> unit Async.Deferred.t

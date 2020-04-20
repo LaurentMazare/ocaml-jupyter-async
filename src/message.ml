@@ -249,3 +249,11 @@ let comm_info_reply t =
 
 let shutdown_reply t =
   reply ~ids:t.ids ~msg_type:"shutdown_reply" ~parent_header:t.header ~content:t.content
+
+let execute_reply t ~status ~execution_count ~user_expressions =
+  reply
+    ~ids:t.ids
+    ~msg_type:"shutdown_reply"
+    ~parent_header:t.header
+    ~content:
+      (Execute_reply_content.yojson_of_t { status; execution_count; user_expressions })

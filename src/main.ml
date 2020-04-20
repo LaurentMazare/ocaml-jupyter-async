@@ -68,20 +68,6 @@ let control_loop t =
   loop ()
 
 let handle_shell t (msg : Message.t) =
-  let send_reply_msg ~msg_type ~content =
-    let msg =
-      { Message.ids = msg.ids
-      ; header =
-          { msg.header with msg_id = Uuid_unix.create () |> Uuid.to_string; msg_type }
-      ; parent_header = msg.header |> Message.Header.yojson_of_t
-      ; metadata = `Assoc []
-      ; content
-      ; buffers = []
-      }
-    in
-    Log.Global.debug "sending %s reply" msg_type;
-    Message.send msg t.shell_socket ~key:t.config.key
-  in
   match msg.header.msg_type with
   | "kernel_info_request" ->
     let msg = Message.kernel_info_reply msg in
@@ -108,15 +94,11 @@ let handle_shell t (msg : Message.t) =
     (* For now use the toploop in the same process. This may not work well as
        calls are likely to be blocking if we want to allow Async computations in
        the executed code.  *)
-    let%bind reply =
+    let%bind status, user_expressions =
       match result with
       | Ok () ->
         t.execution_count <- t.execution_count + 1;
-        return
-          { Message.Execute_reply_content.status = Ok
-          ; execution_count = t.execution_count
-          ; user_expressions = Some []
-          }
+        return (Message.Execute_reply_content.Ok, Some [])
       | Error err ->
         Log.Global.debug "error in toploop: %s" (Error.to_string_hum err);
         let%bind () =
@@ -125,17 +107,16 @@ let handle_shell t (msg : Message.t) =
             t.iopub_socket
             ~key:t.config.key
         in
-        return
-          { Message.Execute_reply_content.status = Error
-          ; execution_count = t.execution_count
-          ; user_expressions = None
-          }
+        return (Message.Execute_reply_content.Error, None)
     in
-    let%bind () =
-      send_reply_msg
-        ~msg_type:"execute_reply"
-        ~content:(Message.Execute_reply_content.yojson_of_t reply)
+    let msg =
+      Message.execute_reply
+        msg
+        ~status
+        ~execution_count:t.execution_count
+        ~user_expressions
     in
+    let%bind () = Message.send msg t.shell_socket ~key:t.config.key in
     Message.send
       (Message.status Idle ~parent_header:msg.header)
       t.iopub_socket
