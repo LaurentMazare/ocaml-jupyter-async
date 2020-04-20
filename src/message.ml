@@ -233,9 +233,19 @@ let stream name text ~parent_header =
     ~parent_header
     ~content:(Stream_content.yojson_of_t { name; text })
 
-let kernel_info_reply ~ids ~parent_header =
+let kernel_info_reply t =
   reply
-    ~ids
+    ~ids:t.ids
     ~msg_type:"kernel_info_reply"
-    ~parent_header
+    ~parent_header:t.header
     ~content:Kernel_info_reply_content.(default () |> yojson_of_t)
+
+let comm_info_reply t =
+  reply
+    ~ids:t.ids
+    ~msg_type:"comm_info_reply"
+    ~parent_header:t.header
+    ~content:(`Assoc [ "comms", `Assoc [] ])
+
+let shutdown_reply t =
+  reply ~ids:t.ids ~msg_type:"shutdown_reply" ~parent_header:t.header ~content:t.content

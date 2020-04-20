@@ -84,12 +84,14 @@ let handle_shell t (msg : Message.t) =
   in
   match msg.header.msg_type with
   | "kernel_info_request" ->
-    let msg = Message.kernel_info_reply ~ids:msg.ids ~parent_header:msg.header in
+    let msg = Message.kernel_info_reply msg in
     Message.send msg t.shell_socket ~key:t.config.key
   | "comm_info_request" ->
-    send_reply_msg ~msg_type:"comm_info_reply" ~content:(`Assoc [ "comms", `Assoc [] ])
+    let msg = Message.comm_info_reply msg in
+    Message.send msg t.shell_socket ~key:t.config.key
   | "shutdown_request" ->
-    let%bind () = send_reply_msg ~msg_type:"shutdown_reply" ~content:msg.content in
+    let msg = Message.shutdown_reply msg in
+    let%bind () = Message.send msg t.shell_socket ~key:t.config.key in
     let%map () = close t in
     Async.shutdown 0
   | "execute_request" ->

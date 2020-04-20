@@ -63,6 +63,8 @@ type t =
 
 val status : Status_content.execution_state -> parent_header:Header.t -> t
 val stream : Stream_content.name -> string -> parent_header:Header.t -> t
-val kernel_info_reply : ids:string list -> parent_header:Header.t -> t
+val kernel_info_reply : t -> t
+val comm_info_reply : t -> t
+val shutdown_reply : t -> t
 val read : _ Zmq_async.Socket.t -> key:string -> t Async.Deferred.t
 val send : t -> _ Zmq_async.Socket.t -> key:string -> unit Async.Deferred.t
