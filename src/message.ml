@@ -99,10 +99,21 @@ end
 
 module Execute_reply_content = struct
   type status =
-    | Ok [@name "ok"]
-    | Error [@name "error"]
-    | Aborted [@name "aborted"]
-  [@@deriving sexp, yojson]
+    | Ok
+    | Error
+    | Aborted
+  [@@deriving sexp]
+
+  let status_of_yojson = function
+    | `String "ok" -> Ok
+    | `String "error" -> Error
+    | `String "aborted" -> Aborted
+    | _ -> failwith "unexpected status"
+
+  let yojson_of_status = function
+    | Ok -> `String "ok"
+    | Error -> `String "error"
+    | Aborted -> `String "aborted"
 
   type t =
     { status : status
@@ -114,9 +125,18 @@ end
 
 module Stream_content = struct
   type name =
-    | Stdout [@name "stdout"]
-    | Stderr [@name "stderr"]
-  [@@deriving sexp, yojson]
+    | Stdout
+    | Stderr
+  [@@deriving sexp]
+
+  let name_of_yojson = function
+    | `String "stdout" -> Stdout
+    | `String "stderr" -> Stderr
+    | _ -> failwith "unexpected name"
+
+  let yojson_of_name = function
+    | Stdout -> `String "stdout"
+    | Stderr -> `String "stderr"
 
   type t =
     { name : name
@@ -127,10 +147,21 @@ end
 
 module Status_content = struct
   type execution_state =
-    | Busy [@name "busy"]
-    | Idle [@name "idle"]
-    | Starting [@name "starting"]
-  [@@deriving sexp, yojson]
+    | Busy
+    | Idle
+    | Starting
+  [@@deriving sexp]
+
+  let execution_state_of_yojson = function
+    | `String "busy" -> Busy
+    | `String "idle" -> Idle
+    | `String "starting" -> Starting
+    | _ -> failwith "unexpected execution state"
+
+  let yojson_of_execution_state = function
+    | Busy -> `String "busy"
+    | Idle -> `String "idle"
+    | Starting -> `String "starting"
 
   type t = { execution_state : execution_state } [@@deriving sexp, yojson]
 end
