@@ -10,12 +10,6 @@ module Header : sig
   [@@deriving sexp_of, yojson]
 end
 
-module Kernel_info_reply_content : sig
-  type t [@@deriving yojson]
-
-  val default : unit -> t
-end
-
 module Execute_request_content : sig
   type t =
     { code : string
@@ -69,5 +63,6 @@ type t =
 
 val status : Status_content.execution_state -> parent_header:Header.t -> t
 val stream : Stream_content.name -> string -> parent_header:Header.t -> t
+val kernel_info_reply : ids:string list -> parent_header:Header.t -> t
 val read : _ Zmq_async.Socket.t -> key:string -> t Async.Deferred.t
 val send : t -> _ Zmq_async.Socket.t -> key:string -> unit Async.Deferred.t

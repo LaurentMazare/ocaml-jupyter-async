@@ -84,9 +84,8 @@ let handle_shell t (msg : Message.t) =
   in
   match msg.header.msg_type with
   | "kernel_info_request" ->
-    send_reply_msg
-      ~msg_type:"kernel_info_reply"
-      ~content:Message.Kernel_info_reply_content.(default () |> yojson_of_t)
+    let msg = Message.kernel_info_reply ~ids:msg.ids ~parent_header:msg.header in
+    Message.send msg t.shell_socket ~key:t.config.key
   | "comm_info_request" ->
     send_reply_msg ~msg_type:"comm_info_reply" ~content:(`Assoc [ "comms", `Assoc [] ])
   | "shutdown_request" ->

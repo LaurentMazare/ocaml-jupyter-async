@@ -209,32 +209,33 @@ let send t socket ~key =
     (ids
     @ (delimiter :: hmac :: header :: parent_header :: metadata :: content :: buffers))
 
-let status execution_state ~parent_header =
-  let header =
-    { parent_header with
-      Header.msg_id = Uuid_unix.create () |> Uuid.to_string
-    ; msg_type = "status"
-    }
-  in
-  { ids = [ "kernel-status" ]
-  ; header
+let reply ~ids ~msg_type ~parent_header ~content =
+  { ids
+  ; header =
+      { parent_header with msg_id = Uuid_unix.create () |> Uuid.to_string; msg_type }
   ; parent_header = Header.yojson_of_t parent_header
   ; metadata = `Assoc []
-  ; content = Status_content.yojson_of_t { execution_state }
+  ; content
   ; buffers = []
   }
 
+let status execution_state ~parent_header =
+  reply
+    ~ids:[ "kernel-status" ]
+    ~msg_type:"status"
+    ~parent_header
+    ~content:(Status_content.yojson_of_t { execution_state })
+
 let stream name text ~parent_header =
-  let header =
-    { parent_header with
-      Header.msg_id = Uuid_unix.create () |> Uuid.to_string
-    ; msg_type = "stream"
-    }
-  in
-  { ids = [ "kernel-stream" ]
-  ; header
-  ; parent_header = Header.yojson_of_t parent_header
-  ; metadata = `Assoc []
-  ; content = Stream_content.yojson_of_t { name; text }
-  ; buffers = []
-  }
+  reply
+    ~ids:[ "kernel-stream" ]
+    ~msg_type:"stream"
+    ~parent_header
+    ~content:(Stream_content.yojson_of_t { name; text })
+
+let kernel_info_reply ~ids ~parent_header =
+  reply
+    ~ids
+    ~msg_type:"kernel_info_reply"
+    ~parent_header
+    ~content:Kernel_info_reply_content.(default () |> yojson_of_t)
