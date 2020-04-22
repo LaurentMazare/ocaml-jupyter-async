@@ -10,6 +10,14 @@ module Header : sig
   [@@deriving sexp_of, yojson]
 end
 
+module Complete_request_content : sig
+  type t =
+    { code : string
+    ; cursor_pos : int
+    }
+  [@@deriving sexp, yojson]
+end
+
 module Execute_request_content : sig
   type t =
     { code : string
@@ -67,5 +75,6 @@ val execute_reply
   -> user_expressions:(string * string) list option
   -> t
 
+val complete_reply : t -> matches:string list -> cursor_start:int -> cursor_end:int -> t
 val read : _ Zmq_async.Socket.t -> key:string -> t Async.Deferred.t
 val send : t -> _ Zmq_async.Socket.t -> key:string -> unit Async.Deferred.t

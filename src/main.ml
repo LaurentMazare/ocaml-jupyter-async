@@ -121,6 +121,10 @@ let handle_shell t (msg : Message.t) =
       (Message.status Idle ~parent_header:msg.header)
       t.iopub_socket
       ~key:t.config.key
+  | "complete_request" ->
+    let complete_request = Message.Complete_request_content.t_of_yojson msg.content in
+    Log.Global.debug_s (Message.Complete_request_content.sexp_of_t complete_request);
+    Deferred.unit
   | _ -> Deferred.unit
 
 let shell_loop t =

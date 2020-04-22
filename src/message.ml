@@ -37,6 +37,39 @@ module Header = struct
   [@@deriving sexp_of, yojson] [@@yojson.allow_extra_fields]
 end
 
+module Complete_request_content = struct
+  type t =
+    { code : string
+    ; cursor_pos : int
+    }
+  [@@deriving sexp, yojson]
+end
+
+module Complete_reply_content = struct
+  type status =
+    | Ok
+    | Error
+  [@@deriving sexp]
+
+  let status_of_yojson = function
+    | `String "ok" -> Ok
+    | `String "error" -> Error
+    | _ -> failwith "unexpected status"
+
+  let yojson_of_status = function
+    | Ok -> `String "ok"
+    | Error -> `String "error"
+
+  type t =
+    { status : status
+    ; matches : string list
+    ; cursor_start : int
+    ; cursor_end : int
+    ; metadata : string json_assoc
+    }
+  [@@deriving sexp, yojson]
+end
+
 module Kernel_info_reply_content = struct
   type language_info =
     { name : string
@@ -257,3 +290,12 @@ let execute_reply t ~status ~execution_count ~user_expressions =
     ~parent_header:t.header
     ~content:
       (Execute_reply_content.yojson_of_t { status; execution_count; user_expressions })
+
+let complete_reply t ~matches ~cursor_start ~cursor_end =
+  reply
+    ~ids:t.ids
+    ~msg_type:"complete_reply"
+    ~parent_header:t.header
+    ~content:
+      (Complete_reply_content.yojson_of_t
+         { status = Ok; matches; cursor_start; cursor_end; metadata = [] })
