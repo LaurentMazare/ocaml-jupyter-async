@@ -42,6 +42,7 @@ type t =
   ; mutable execution_count : int
   ; mutable last_parent_header : Message.Header.t option
   ; worker : Worker.t
+  ; complete : Complete.t
   }
 
 let close t =
@@ -201,6 +202,7 @@ let run config =
     ; execution_count = 0
     ; worker
     ; last_parent_header = None
+    ; complete = Complete.create ()
     }
   in
   Deferred.all_unit

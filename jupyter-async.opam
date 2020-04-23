@@ -22,6 +22,7 @@ depends: [
   "ocaml-compiler-libs"
   "async"
   "base"
+  "ocp-index"
   "ppx_expect"
   "ppx_let"
   "ppx_yojson_conv_lib"
