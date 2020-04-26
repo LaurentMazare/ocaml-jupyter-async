@@ -14,7 +14,8 @@ let maybe_initialize () =
     Toploop.set_paths ();
     !Toploop.toplevel_startup_hook ();
     (* required for side-effect initialization in Topdirs *)
-    Toploop.initialize_toplevel_env ())
+    Toploop.initialize_toplevel_env ();
+    Sys.getenv "OCAML_TOPLEVEL_PATH" |> Option.iter ~f:Topdirs.dir_directory)
 
 let exn_to_string exn ~code =
   let print_loc _ _report ppf (location : Location.t) =
