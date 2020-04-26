@@ -98,6 +98,7 @@ let toploop_eval str =
     let lexing = Lexing.from_string str in
     let phrases = !Toploop.parse_use_file lexing in
     List.iter phrases ~f:(fun phrase ->
+        let phrase = Ppx_preprocess.phrase phrase ~sourcefile:"jupyter-cell" in
         let ok = Toploop.execute_phrase !verbose F.std_formatter phrase in
         ignore (ok : bool));
     F.pp_print_flush F.std_formatter ();
