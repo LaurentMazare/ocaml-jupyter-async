@@ -73,12 +73,16 @@ let spawn () =
   (* This has to be called before starting the async scheduler. *)
   match Unix.fork () with
   | `In_the_child ->
+    List.iter [ worker_in_write; worker_out_read; stdout_read; stderr_read ] ~f:Unix.close;
     Unix.dup2 ~src:stdout_write ~dst:Unix.stdout;
     Unix.dup2 ~src:stderr_write ~dst:Unix.stderr;
     Unix.close stdout_write;
     Unix.close stderr_write;
     worker ~worker_in_read ~worker_out_write
   | `In_the_parent pid ->
+    List.iter
+      [ worker_in_read; worker_out_write; stdout_write; stderr_write ]
+      ~f:Unix.close;
     let open Async in
     let stderr_reader =
       Fd.create Char stderr_read (Info.of_string "stderr-read") |> Reader.create
