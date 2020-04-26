@@ -1,5 +1,6 @@
 open Core
 open Async
+module Message = Jupyter_async_message.Message
 
 let buf_len = 4096
 
@@ -93,7 +94,7 @@ let handle_shell t (msg : Message.t) =
     let%bind result = Worker.execute t.worker ~code:execute_request.code in
     (* For now use the toploop in the same process. This may not work well as
        calls are likely to be blocking if we want to allow Async computations in
-       the executed code.  *)
+       the executed code. *)
     let%bind status, user_expressions =
       match result with
       | Ok () ->

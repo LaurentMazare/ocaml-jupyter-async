@@ -1,0 +1,13 @@
+(library
+  (name jupyter_async_message)
+  (public_name jupyter-async.message)
+  (libraries
+    async
+    base
+    core_kernel.unpack_buffer
+    cryptokit
+    uuidm
+    zmq-async
+  )
+  (preprocess (pps ppx_bin_prot ppx_let ppx_sexp_conv ppx_yojson_conv))
+)
