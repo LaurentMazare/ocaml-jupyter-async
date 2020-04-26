@@ -25,6 +25,8 @@ type t =
   }
 
 let worker ~worker_in_read ~worker_out_write =
+  Ocaml_toploop.maybe_initialize ();
+  Complete.reset ();
   let unpack_buffer =
     Unpack_buffer.Unpack_one.create_bin_prot bin_reader_worker_input
     |> Unpack_buffer.create

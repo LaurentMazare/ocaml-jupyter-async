@@ -124,7 +124,20 @@ let handle_shell t (msg : Message.t) =
   | "complete_request" ->
     let complete_request = Message.Complete_request_content.t_of_yojson msg.content in
     Log.Global.debug_s (Message.Complete_request_content.sexp_of_t complete_request);
-    Deferred.unit
+    (* TODO: use cursor_pos, maybe cut to the previous new line? *)
+    let { Message.Complete_request_content.cursor_pos; code } = complete_request in
+    let%bind result = Worker.complete t.worker ~code in
+    (match result with
+    | `busy -> Deferred.unit
+    | `ok (n, completions) ->
+      let msg =
+        Message.complete_reply
+          ~matches:(List.map completions ~f:fst)
+          ~cursor_start:n
+          ~cursor_end:cursor_pos
+          msg
+      in
+      Message.send msg t.shell_socket ~key:t.config.key)
   | _ -> Deferred.unit
 
 let shell_loop t =
