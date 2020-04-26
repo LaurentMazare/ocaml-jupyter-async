@@ -124,8 +124,8 @@ let handle_shell t (msg : Message.t) =
   | "complete_request" ->
     let complete_request = Message.Complete_request_content.t_of_yojson msg.content in
     Log.Global.debug_s (Message.Complete_request_content.sexp_of_t complete_request);
-    (* TODO: use cursor_pos, maybe cut to the previous new line? *)
     let { Message.Complete_request_content.cursor_pos; code } = complete_request in
+    let code = Zed_utf8.before code cursor_pos in
     let%bind result = Worker.complete t.worker ~code in
     (match result with
     | `busy -> Deferred.unit
