@@ -92,7 +92,9 @@ let spawn () =
     let writer =
       Fd.create Char worker_in_write (Info.of_string "worker-in-write") |> Writer.create
     in
-    Async.upon (Reader.close_finished stdout_reader) (fun () -> Async.shutdown 1);
+    Async.upon (Reader.close_finished stdout_reader) (fun () ->
+        Log.Global.error "worker process connection closed";
+        Async.shutdown 1);
     { pid
     ; reader
     ; writer

@@ -28,7 +28,10 @@ module Config = struct
       | `iopub -> t.iopub_port
     in
     let url = sprintf "%s://%s:%d" t.transport t.ip port in
-    Zmq.Socket.bind socket url;
+    (try Zmq.Socket.bind socket url with
+    | exn ->
+      Log.Global.error "cannot bind to url %s: %s" url (Exn.to_string exn);
+      raise exn);
     Zmq_async.Socket.of_socket socket
 end
 
