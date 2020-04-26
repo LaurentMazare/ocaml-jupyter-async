@@ -49,7 +49,7 @@ let worker ~worker_in_read ~worker_out_write =
     let result =
       match input with
       | Execute { code } ->
-        let result = Ocaml_toploop.toploop_eval code ~verbose:true in
+        let result = Ocaml_toploop.toploop_eval code in
         Complete.reset ();
         Execute_output result
       | Complete { code } -> Complete_output (Complete.complete code)

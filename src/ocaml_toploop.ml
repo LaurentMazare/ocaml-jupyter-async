@@ -1,6 +1,7 @@
 module F = Format
 open Base
 
+let verbose = ref true
 let is_initialized = ref false
 
 let set_topfind () =
@@ -27,6 +28,10 @@ let maybe_initialize () =
   if not !is_initialized
   then (
     set_topfind ();
+    Caml.Hashtbl.add
+      Toploop.directive_table
+      "verbose"
+      (Toploop.Directive_bool (fun v -> verbose := v));
     is_initialized := true;
     Clflags.debug := true;
     Clflags.verbose := false;
@@ -87,13 +92,13 @@ let exn_to_string exn ~code =
   Location.report_exception formatter exn;
   Buffer.contents buffer
 
-let toploop_eval str ~verbose =
+let toploop_eval str =
   try
     maybe_initialize ();
     let lexing = Lexing.from_string str in
     let phrases = !Toploop.parse_use_file lexing in
     List.iter phrases ~f:(fun phrase ->
-        let ok = Toploop.execute_phrase verbose F.std_formatter phrase in
+        let ok = Toploop.execute_phrase !verbose F.std_formatter phrase in
         ignore (ok : bool));
     F.pp_print_flush F.std_formatter ();
     Ok ()
