@@ -197,6 +197,9 @@ let run config =
   let context = Zmq.Context.create () in
   (* It is import to call this before entering async. *)
   let worker = Worker.spawn () in
+  Signal.handle [ Signal.int ] ~f:(fun _sigint ->
+      ignore
+        (Signal.send Signal.int (`Pid (Worker.pid worker)) : [ `No_such_process | `Ok ]));
   let t =
     { config
     ; hb_socket = Config.socket config `hb ~context ~kind:Zmq.Socket.rep

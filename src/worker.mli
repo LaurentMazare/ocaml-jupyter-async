@@ -13,3 +13,4 @@ val complete
 
 val stdout_reader : t -> Reader.t
 val stderr_reader : t -> Reader.t
+val pid : t -> Pid.t

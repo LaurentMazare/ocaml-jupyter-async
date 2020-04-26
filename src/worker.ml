@@ -92,6 +92,7 @@ let spawn () =
     let writer =
       Fd.create Char worker_in_write (Info.of_string "worker-in-write") |> Writer.create
     in
+    Async.upon (Reader.close_finished stdout_reader) (fun () -> Async.shutdown 1);
     { pid
     ; reader
     ; writer
@@ -125,3 +126,4 @@ let complete t ~code =
 
 let stdout_reader t = t.stdout_reader
 let stderr_reader t = t.stderr_reader
+let pid t = t.pid

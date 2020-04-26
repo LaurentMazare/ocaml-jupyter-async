@@ -27,6 +27,7 @@ let set_topfind () =
 let maybe_initialize () =
   if not !is_initialized
   then (
+    Core.Sys.catch_break true;
     set_topfind ();
     Caml.Hashtbl.add
       Toploop.directive_table
@@ -104,4 +105,5 @@ let toploop_eval str =
     F.pp_print_flush F.std_formatter ();
     Ok ()
   with
+  | Caml.Sys.Break -> Or_error.error_string "interrupted by the user"
   | exn -> Or_error.error_string (exn_to_string exn ~code:str)
