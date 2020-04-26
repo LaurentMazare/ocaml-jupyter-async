@@ -6,6 +6,15 @@ let is_initialized = ref false
 let maybe_initialize () =
   if not !is_initialized
   then (
+    Caml.Hashtbl.add
+      Toploop.directive_table
+      "require"
+      (Toploop.Directive_string
+         (fun str ->
+           let packages = String.split_on_chars str ~on:[ ' '; '\r'; '\n'; ','; '\t' ] in
+           Findlib.package_deep_ancestors !Topfind.predicates packages |> Topfind.load));
+    Topfind.add_predicates [ "byte"; "toploop" ];
+    Topdirs.dir_directory (Findlib.package_directory "findlib");
     is_initialized := true;
     Clflags.debug := true;
     Clflags.verbose := false;
