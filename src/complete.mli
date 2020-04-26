@@ -1,4 +1,2 @@
-type t
-
-val create : unit -> t
-val complete : t -> string -> string list
+val reset : unit -> unit
+val complete : string -> int * (string * string) list

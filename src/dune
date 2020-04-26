@@ -7,7 +7,7 @@
     compiler-libs.toplevel
     core_kernel.unpack_buffer
     cryptokit
-    ocp-index.lib
+    jupyter_async_utop
     uuidm
     zmq-async
   )
