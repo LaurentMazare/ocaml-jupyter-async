@@ -2,6 +2,7 @@ module F = Format
 open Base
 
 let verbose = ref true
+let rewrite_lwt_async = ref true
 let is_initialized = ref false
 
 let set_topfind () =
@@ -33,6 +34,10 @@ let maybe_initialize () =
       Toploop.directive_table
       "verbose"
       (Toploop.Directive_bool (fun v -> verbose := v));
+    Caml.Hashtbl.add
+      Toploop.directive_table
+      "rewrite_lwt_async"
+      (Toploop.Directive_bool (fun v -> rewrite_lwt_async := v));
     is_initialized := true;
     Clflags.debug := true;
     Clflags.verbose := false;
@@ -99,7 +104,8 @@ let toploop_eval str =
     let lexing = Lexing.from_string str in
     let phrases = !Toploop.parse_use_file lexing in
     List.iter phrases ~f:(fun phrase ->
-        let phrase = Ppx_preprocess.phrase phrase ~sourcefile:"jupyter-cell" in
+        let phrase = Rewrite.apply_ppx phrase ~sourcefile:"jupyter-cell" in
+        let phrase = if !rewrite_lwt_async then Rewrite.lwt_async phrase else phrase in
         let ok = Toploop.execute_phrase !verbose F.std_formatter phrase in
         ignore (ok : bool));
     F.pp_print_flush F.std_formatter ();

@@ -14,7 +14,7 @@
   (preprocess (pps ppx_bin_prot ppx_let ppx_sexp_conv ppx_yojson_conv))
 )
 (rule
- (targets ppx_preprocess.ml)
- (deps ppx_preprocess.cppo.ml)
+ (targets rewrite.ml)
+ (deps rewrite.cppo.ml)
  (action (run %{bin:cppo} -V OCAML:%{ocaml_version} %{deps} -o %{targets}))
 )
