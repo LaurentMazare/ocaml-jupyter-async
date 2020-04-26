@@ -10,6 +10,15 @@ module Complete_request_content : sig
   [@@deriving sexp, yojson]
 end
 
+module Inspect_request_content : sig
+  type t =
+    { code : string
+    ; cursor_pos : int
+    ; detail_level : int
+    }
+  [@@deriving sexp, yojson]
+end
+
 module Execute_request_content : sig
   type t =
     { code : string
@@ -51,6 +60,7 @@ module Content : sig
     | Shutdown_request
     | Execute_request of Execute_request_content.t
     | Complete_request of Complete_request_content.t
+    | Inspect_request of Inspect_request_content.t
     | Unsupported of { msg_type : string }
   [@@deriving sexp_of]
 end
@@ -73,5 +83,6 @@ val execute_reply
   -> t
 
 val complete_reply : t -> matches:string list -> cursor_start:int -> cursor_end:int -> t
+val inspect_reply : t -> found:bool -> data:(string * string) list -> t
 val read : _ Zmq_async.Socket.t -> key:string -> t Async.Deferred.t
 val send : t -> _ Zmq_async.Socket.t -> key:string -> unit Async.Deferred.t

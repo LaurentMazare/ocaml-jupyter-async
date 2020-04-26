@@ -70,6 +70,39 @@ module Complete_reply_content = struct
   [@@deriving sexp, yojson]
 end
 
+module Inspect_request_content = struct
+  type t =
+    { code : string
+    ; cursor_pos : int
+    ; detail_level : int
+    }
+  [@@deriving sexp, yojson]
+end
+
+module Inspect_reply_content = struct
+  type status =
+    | Ok
+    | Error
+  [@@deriving sexp]
+
+  let status_of_yojson = function
+    | `String "ok" -> Ok
+    | `String "error" -> Error
+    | _ -> failwith "unexpected status"
+
+  let yojson_of_status = function
+    | Ok -> `String "ok"
+    | Error -> `String "error"
+
+  type t =
+    { status : status
+    ; found : bool
+    ; data : string json_assoc
+    ; metadata : string json_assoc
+    }
+  [@@deriving sexp, yojson]
+end
+
 module Kernel_info_reply_content = struct
   type language_info =
     { name : string
@@ -300,6 +333,14 @@ let complete_reply t ~matches ~cursor_start ~cursor_end =
       (Complete_reply_content.yojson_of_t
          { status = Ok; matches; cursor_start; cursor_end; metadata = [] })
 
+let inspect_reply t ~found ~data =
+  reply
+    ~ids:t.ids
+    ~msg_type:"inspect_reply"
+    ~parent_header:t.header
+    ~content:
+      (Inspect_reply_content.yojson_of_t { status = Ok; found; data; metadata = [] })
+
 let header t = t.header
 
 module Content = struct
@@ -309,6 +350,7 @@ module Content = struct
     | Shutdown_request
     | Execute_request of Execute_request_content.t
     | Complete_request of Complete_request_content.t
+    | Inspect_request of Inspect_request_content.t
     | Unsupported of { msg_type : string }
   [@@deriving sexp_of]
 end
@@ -321,4 +363,5 @@ let content t =
   | "execute_request" -> Execute_request (Execute_request_content.t_of_yojson t.content)
   | "complete_request" ->
     Complete_request (Complete_request_content.t_of_yojson t.content)
+  | "inspect_request" -> Inspect_request (Inspect_request_content.t_of_yojson t.content)
   | msg_type -> Unsupported { msg_type }
