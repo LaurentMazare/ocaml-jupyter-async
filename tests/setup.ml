@@ -21,6 +21,7 @@ type t =
   { shell_socket : [ `Dealer ] Zmq_async.Socket.t
   ; ctx : Zmq.Context.t
   ; key : string
+  ; process : Process.t
   }
 
 let start () =
@@ -42,20 +43,21 @@ let start () =
     |> Yojson.Safe.to_string
   in
   let%bind () = Writer.save connection_file ~contents in
-  don't_wait_for
-    (Process.run_exn
-       ~prog:"../bin/jupyter_async_kernel.bc"
-       ~args:[ "-connection-file"; connection_file ]
-       ()
-    >>| fun s -> failwith s);
+  let%bind process =
+    Process.create_exn
+      ~prog:"../bin/jupyter_async_kernel.bc"
+      ~args:[ "-connection-file"; connection_file ]
+      ()
+  in
   let%bind () = after (sec 0.5) in
   let ctx = Zmq.Context.create () in
   let shell_socket = Zmq.Socket.create ctx Zmq.Socket.dealer in
   Zmq.Socket.connect shell_socket (sprintf "tcp://127.0.0.1:%d" shell_port);
   let shell_socket = Zmq_async.Socket.of_socket shell_socket in
-  return { shell_socket; ctx; key }
+  return { shell_socket; ctx; key; process }
 
 let close t =
+  Signal.send_exn Signal.term (`Pid (Process.pid t.process));
   let%map () = Zmq_async.Socket.close t.shell_socket in
   Zmq.Context.terminate t.ctx
 
@@ -67,4 +69,5 @@ let%expect_test _ =
   let content = Msg.content msg in
   Core.printf "%s" (Msg.Content.sexp_of_t content |> Sexp.to_string);
   let%bind () = close t in
-  [%expect {| (Unsupported(msg_type execute_reply)) |}]
+  [%expect
+    {| (Unsupported(msg_type execute_reply)(content"{\"status\":\"ok\",\"execution_count\":1,\"user_expressions\":{}}")) |}]

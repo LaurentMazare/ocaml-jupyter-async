@@ -344,6 +344,10 @@ let inspect_reply t ~found ~data =
 let header t = t.header
 
 module Content = struct
+  type json_as_string = Yojson.Safe.t
+
+  let sexp_of_json_as_string yojson = Sexp.Atom (Yojson.Safe.to_string yojson)
+
   type t =
     | Kernel_info_request
     | Comm_info_request
@@ -351,7 +355,10 @@ module Content = struct
     | Execute_request of Execute_request_content.t
     | Complete_request of Complete_request_content.t
     | Inspect_request of Inspect_request_content.t
-    | Unsupported of { msg_type : string }
+    | Unsupported of
+        { msg_type : string
+        ; content : json_as_string
+        }
   [@@deriving sexp_of]
 end
 
@@ -364,7 +371,7 @@ let content t =
   | "complete_request" ->
     Complete_request (Complete_request_content.t_of_yojson t.content)
   | "inspect_request" -> Inspect_request (Inspect_request_content.t_of_yojson t.content)
-  | msg_type -> Unsupported { msg_type }
+  | msg_type -> Unsupported { msg_type; content = t.content }
 
 module For_testing = struct
   let execute_request ~code =

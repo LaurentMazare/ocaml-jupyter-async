@@ -73,6 +73,7 @@ let spawn () =
   (* This has to be called before starting the async scheduler. *)
   match Unix.fork () with
   | `In_the_child ->
+    (ok_exn Linux_ext.pr_set_pdeathsig) Signal.term;
     List.iter [ worker_in_write; worker_out_read; stdout_read; stderr_read ] ~f:Unix.close;
     Unix.dup2 ~src:stdout_write ~dst:Unix.stdout;
     Unix.dup2 ~src:stderr_write ~dst:Unix.stderr;

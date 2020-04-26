@@ -61,7 +61,10 @@ module Content : sig
     | Execute_request of Execute_request_content.t
     | Complete_request of Complete_request_content.t
     | Inspect_request of Inspect_request_content.t
-    | Unsupported of { msg_type : string }
+    | Unsupported of
+        { msg_type : string
+        ; content : Yojson.Safe.t
+        }
   [@@deriving sexp_of]
 end
 
