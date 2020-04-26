@@ -1,13 +1,5 @@
 module Header : sig
-  type t =
-    { msg_id : string
-    ; session : string
-    ; username : string
-    ; date : string option [@yojson.option]
-    ; msg_type : string
-    ; version : string
-    }
-  [@@deriving sexp_of, yojson]
+  type t [@@deriving sexp_of, yojson]
 end
 
 module Complete_request_content : sig
@@ -52,16 +44,21 @@ module Status_content : sig
     | Starting
 end
 
-type t =
-  { ids : string list
-  ; header : Header.t
-  ; parent_header : (Yojson.Safe.t[@sexp.opaque])
-  ; metadata : (Yojson.Safe.t[@sexp.opaque])
-  ; content : (Yojson.Safe.t[@sexp.opaque])
-  ; buffers : string list
-  }
-[@@deriving sexp_of]
+module Content : sig
+  type t =
+    | Kernel_info_request
+    | Comm_info_request
+    | Shutdown_request
+    | Execute_request of Execute_request_content.t
+    | Complete_request of Complete_request_content.t
+    | Unsupported of { msg_type : string }
+  [@@deriving sexp_of]
+end
 
+type t [@@deriving sexp_of]
+
+val content : t -> Content.t
+val header : t -> Header.t
 val status : Status_content.execution_state -> parent_header:Header.t -> t
 val stream : Stream_content.name -> string -> parent_header:Header.t -> t
 val kernel_info_reply : t -> t

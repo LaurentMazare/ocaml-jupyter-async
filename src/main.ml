@@ -68,27 +68,24 @@ let control_loop t =
   loop ()
 
 let handle_shell t (msg : Message.t) =
-  match msg.header.msg_type with
-  | "kernel_info_request" ->
+  let parent_header = Message.header msg in
+  match Message.content msg with
+  | Kernel_info_request ->
     let msg = Message.kernel_info_reply msg in
     Message.send msg t.shell_socket ~key:t.config.key
-  | "comm_info_request" ->
+  | Comm_info_request ->
     let msg = Message.comm_info_reply msg in
     Message.send msg t.shell_socket ~key:t.config.key
-  | "shutdown_request" ->
+  | Shutdown_request ->
     let msg = Message.shutdown_reply msg in
     let%bind () = Message.send msg t.shell_socket ~key:t.config.key in
     let%map () = close t in
     Async.shutdown 0
-  | "execute_request" ->
-    t.last_parent_header <- Some msg.header;
-    let execute_request = Message.Execute_request_content.t_of_yojson msg.content in
+  | Execute_request execute_request ->
+    t.last_parent_header <- Some parent_header;
     Log.Global.debug_s (Message.Execute_request_content.sexp_of_t execute_request);
     let%bind () =
-      Message.send
-        (Message.status Busy ~parent_header:msg.header)
-        t.iopub_socket
-        ~key:t.config.key
+      Message.send (Message.status Busy ~parent_header) t.iopub_socket ~key:t.config.key
     in
     let%bind result = Worker.execute t.worker ~code:execute_request.code in
     (* For now use the toploop in the same process. This may not work well as
@@ -103,7 +100,7 @@ let handle_shell t (msg : Message.t) =
         Log.Global.debug "error in toploop: %s" (Error.to_string_hum err);
         let%bind () =
           Message.send
-            (Message.stream Stderr (Error.to_string_hum err) ~parent_header:msg.header)
+            (Message.stream Stderr (Error.to_string_hum err) ~parent_header)
             t.iopub_socket
             ~key:t.config.key
         in
@@ -117,12 +114,8 @@ let handle_shell t (msg : Message.t) =
         ~user_expressions
     in
     let%bind () = Message.send msg t.shell_socket ~key:t.config.key in
-    Message.send
-      (Message.status Idle ~parent_header:msg.header)
-      t.iopub_socket
-      ~key:t.config.key
-  | "complete_request" ->
-    let complete_request = Message.Complete_request_content.t_of_yojson msg.content in
+    Message.send (Message.status Idle ~parent_header) t.iopub_socket ~key:t.config.key
+  | Complete_request complete_request ->
     Log.Global.debug_s (Message.Complete_request_content.sexp_of_t complete_request);
     let { Message.Complete_request_content.cursor_pos; code } = complete_request in
     let code = Zed_utf8.before code cursor_pos in

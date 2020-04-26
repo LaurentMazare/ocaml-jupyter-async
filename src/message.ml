@@ -299,3 +299,26 @@ let complete_reply t ~matches ~cursor_start ~cursor_end =
     ~content:
       (Complete_reply_content.yojson_of_t
          { status = Ok; matches; cursor_start; cursor_end; metadata = [] })
+
+let header t = t.header
+
+module Content = struct
+  type t =
+    | Kernel_info_request
+    | Comm_info_request
+    | Shutdown_request
+    | Execute_request of Execute_request_content.t
+    | Complete_request of Complete_request_content.t
+    | Unsupported of { msg_type : string }
+  [@@deriving sexp_of]
+end
+
+let content t =
+  match t.header.msg_type with
+  | "kernel_info_request" -> Content.Kernel_info_request
+  | "comm_info_request" -> Comm_info_request
+  | "shutdown_request" -> Shutdown_request
+  | "execute_request" -> Execute_request (Execute_request_content.t_of_yojson t.content)
+  | "complete_request" ->
+    Complete_request (Complete_request_content.t_of_yojson t.content)
+  | msg_type -> Unsupported { msg_type }
