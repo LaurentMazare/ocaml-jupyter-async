@@ -1,5 +1,5 @@
 (library
  (name jupyter_async_tests)
  (inline_tests (deps ../bin/jupyter_async_kernel.bc))
- (libraries core async zmq-async)
+ (libraries core async jupyter_async_message zmq-async)
  (preprocess (pps ppx_let ppx_sexp_conv ppx_expect ppx_yojson_conv)))

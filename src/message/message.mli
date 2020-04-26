@@ -86,3 +86,7 @@ val complete_reply : t -> matches:string list -> cursor_start:int -> cursor_end:
 val inspect_reply : t -> found:bool -> data:(string * string) list -> t
 val read : _ Zmq_async.Socket.t -> key:string -> t Async.Deferred.t
 val send : t -> _ Zmq_async.Socket.t -> key:string -> unit Async.Deferred.t
+
+module For_testing : sig
+  val execute_request : code:string -> t
+end

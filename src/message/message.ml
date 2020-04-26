@@ -319,7 +319,7 @@ let shutdown_reply t =
 let execute_reply t ~status ~execution_count ~user_expressions =
   reply
     ~ids:t.ids
-    ~msg_type:"shutdown_reply"
+    ~msg_type:"execute_reply"
     ~parent_header:t.header
     ~content:
       (Execute_reply_content.yojson_of_t { status; execution_count; user_expressions })
@@ -365,3 +365,29 @@ let content t =
     Complete_request (Complete_request_content.t_of_yojson t.content)
   | "inspect_request" -> Inspect_request (Inspect_request_content.t_of_yojson t.content)
   | msg_type -> Unsupported { msg_type }
+
+module For_testing = struct
+  let execute_request ~code =
+    { ids = [ "id1"; "id2" ]
+    ; header =
+        { msg_id = "test-id"
+        ; session = "test-session"
+        ; username = "test-user"
+        ; date = None
+        ; msg_type = "execute_request"
+        ; version = protocol_version
+        }
+    ; parent_header = `Null
+    ; metadata = `Assoc []
+    ; content =
+        Execute_request_content.yojson_of_t
+          { Execute_request_content.code
+          ; silent = false
+          ; store_history = None
+          ; user_expressions = []
+          ; allow_stdin = false
+          ; stop_on_error = true
+          }
+    ; buffers = []
+    }
+end
