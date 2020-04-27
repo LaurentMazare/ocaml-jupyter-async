@@ -198,9 +198,9 @@ let register_printer () =
       | _ -> None)
 
 let run config =
-  let context = Zmq.Context.create () in
-  (* It is import to call this before entering async. *)
+  (* It is important to call [Worker.spawn] before entering async. *)
   let worker = Worker.spawn () in
+  let context = Zmq.Context.create () in
   Signal.handle [ Signal.int ] ~f:(fun _sigint ->
       ignore
         (Signal.send Signal.int (`Pid (Worker.pid worker)) : [ `No_such_process | `Ok ]));
