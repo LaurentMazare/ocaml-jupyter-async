@@ -1,4 +1,4 @@
 (executable
  (name jupyter_async_kernel)
- (libraries core jupyter_async)
+ (libraries core jupyter_async jupyter_async_toploop)
  (modes byte))
