@@ -211,6 +211,25 @@ module Stream_content = struct
   [@@deriving sexp, yojson]
 end
 
+module Display_data_content = struct
+  type t =
+    | Image of
+        { width : int
+        ; height : int
+        ; mime : string
+        ; data : string
+        }
+  [@@deriving sexp]
+
+  let yojson_of_t = function
+    | Image { width; height; mime; data } ->
+      `Assoc
+        [ "data", `Assoc [ mime, `String data ]
+        ; ( "metadata"
+          , `Assoc [ mime, `Assoc [ "width", `Int width; "height", `Int height ] ] )
+        ]
+end
+
 module Status_content = struct
   type execution_state =
     | Busy
@@ -298,6 +317,13 @@ let stream name text ~parent_header =
     ~msg_type:"stream"
     ~parent_header
     ~content:(Stream_content.yojson_of_t { name; text })
+
+let display_data content ~parent_header =
+  reply
+    ~ids:[ "display-data" ]
+    ~msg_type:"display_data"
+    ~parent_header
+    ~content:(Display_data_content.yojson_of_t content)
 
 let kernel_info_reply t =
   reply

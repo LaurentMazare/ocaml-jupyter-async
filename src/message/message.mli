@@ -46,6 +46,17 @@ module Stream_content : sig
   [@@deriving sexp, yojson]
 end
 
+module Display_data_content : sig
+  type t =
+    | Image of
+        { width : int
+        ; height : int
+        ; mime : string
+        ; data : string
+        }
+  [@@deriving sexp]
+end
+
 module Status_content : sig
   type execution_state =
     | Busy
@@ -74,6 +85,7 @@ val content : t -> Content.t
 val header : t -> Header.t
 val status : Status_content.execution_state -> parent_header:Header.t -> t
 val stream : Stream_content.name -> string -> parent_header:Header.t -> t
+val display_data : Display_data_content.t -> parent_header:Header.t -> t
 val kernel_info_reply : t -> t
 val comm_info_reply : t -> t
 val shutdown_reply : t -> t
