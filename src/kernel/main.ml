@@ -197,9 +197,9 @@ let register_printer () =
         Exn.to_string exn |> Option.some
       | _ -> None)
 
-let run config =
-  (* It is important to call [Worker.spawn] before entering async. *)
-  let worker = Worker.spawn () in
+let run kernel_module config =
+  (* It is import to call this before entering async. *)
+  let worker = Worker.spawn kernel_module in
   let context = Zmq.Context.create () in
   Signal.handle [ Signal.int ] ~f:(fun _sigint ->
       ignore
@@ -226,7 +226,7 @@ let run config =
     ; stderr_loop t
     ]
 
-let command =
+let command kernel_module =
   Core.Command.basic
     ~summary:"an ocaml kernel for jupyter"
     (let%map_open.Command connection_file =
@@ -235,6 +235,8 @@ let command =
      fun () ->
        register_printer ();
        Log.Global.set_level `Debug;
-       let run = Yojson.Safe.from_file connection_file |> Config.t_of_yojson |> run in
+       let run =
+         Yojson.Safe.from_file connection_file |> Config.t_of_yojson |> run kernel_module
+       in
        don't_wait_for run;
        Scheduler.go () |> never_returns)

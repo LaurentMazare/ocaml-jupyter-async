@@ -1,1 +1,1 @@
-val command : Core.Command.t
+val command : (module Kernel_intf.S) -> Core.Command.t

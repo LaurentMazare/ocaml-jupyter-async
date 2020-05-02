@@ -24,9 +24,8 @@ type t =
   ; sequencer : unit Async.Sequencer.t
   }
 
-let worker ~worker_in_read ~worker_out_write =
-  Ocaml_toploop.maybe_initialize ();
-  Complete.reset ();
+let worker (module K : Kernel_intf.S) ~worker_in_read ~worker_out_write =
+  let kernel = K.create () in
   let unpack_buffer =
     Unpack_buffer.Unpack_one.create_bin_prot bin_reader_worker_input
     |> Unpack_buffer.create
@@ -48,11 +47,8 @@ let worker ~worker_in_read ~worker_out_write =
   let on_input input =
     let result =
       match input with
-      | Execute { code } ->
-        let result = Ocaml_toploop.toploop_eval code in
-        Complete.reset ();
-        Execute_output result
-      | Complete { code } -> Complete_output (Complete.complete code)
+      | Execute { code } -> Execute_output (K.eval kernel code)
+      | Complete { code } -> Complete_output (K.complete kernel code)
     in
     send_output result
   in
@@ -65,7 +61,7 @@ let worker ~worker_in_read ~worker_out_write =
   in
   loop ()
 
-let spawn () =
+let spawn kernel_module =
   let worker_in_read, worker_in_write = Unix.pipe () in
   let worker_out_read, worker_out_write = Unix.pipe () in
   let stdout_read, stdout_write = Unix.pipe () in
@@ -79,7 +75,7 @@ let spawn () =
     Unix.dup2 ~src:stderr_write ~dst:Unix.stderr;
     Unix.close stdout_write;
     Unix.close stderr_write;
-    worker ~worker_in_read ~worker_out_write
+    worker kernel_module ~worker_in_read ~worker_out_write
   | `In_the_parent pid ->
     List.iter
       [ worker_in_read; worker_out_write; stdout_write; stderr_write ]
