@@ -219,7 +219,8 @@ module Display_data_content = struct
         ; mime : string
         ; data : string
         }
-  [@@deriving sexp]
+    | Text of string
+  [@@deriving sexp, bin_io]
 
   let yojson_of_t = function
     | Image { width; height; mime; data } ->
@@ -228,6 +229,7 @@ module Display_data_content = struct
         ; ( "metadata"
           , `Assoc [ mime, `Assoc [ "width", `Int width; "height", `Int height ] ] )
         ]
+    | Text text -> `Assoc [ "data", `Assoc [ "plain/text", `String text ] ]
 end
 
 module Status_content = struct

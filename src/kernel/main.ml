@@ -183,6 +183,25 @@ let redirect_loop t which ~reader =
   in
   loop ()
 
+let display_data_loop t =
+  let rec loop () =
+    let%bind display_data = Worker.display_data t.worker in
+    match display_data with
+    | `Eof -> Deferred.unit
+    | `Ok display_data ->
+      let%bind () =
+        match t.last_parent_header with
+        | None -> Deferred.unit
+        | Some parent_header ->
+          Message.send
+            (Message.display_data display_data ~parent_header)
+            t.iopub_socket
+            ~key:t.config.key
+      in
+      loop ()
+  in
+  loop ()
+
 let stdout_loop t =
   let reader = Worker.stdout_reader t.worker in
   redirect_loop t Stdout ~reader
@@ -224,6 +243,7 @@ let run kernel_module config =
     ; stdin_loop t
     ; stdout_loop t
     ; stderr_loop t
+    ; display_data_loop t
     ]
 
 let command kernel_module =

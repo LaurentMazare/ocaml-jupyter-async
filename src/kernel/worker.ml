@@ -15,12 +15,17 @@ type worker_output =
   | Complete_output of (int * (string * string) list)
 [@@deriving bin_io]
 
+type display_data_output = Jupyter_async_message.Message.Display_data_content.t
+[@@deriving bin_io]
+
 type t =
   { pid : Pid.t
   ; reader : Async.Reader.t
   ; stdout_reader : Async.Reader.t
   ; stderr_reader : Async.Reader.t
   ; writer : Async.Writer.t
+  ; display_data_next :
+      unit -> display_data_output Async.Reader.Read_result.t Async.Deferred.t
   ; sequencer : unit Async.Sequencer.t
   }
 
@@ -66,6 +71,7 @@ let spawn kernel_module =
   let worker_out_read, worker_out_write = Unix.pipe () in
   let stdout_read, stdout_write = Unix.pipe () in
   let stderr_read, stderr_write = Unix.pipe () in
+  let display_data_read, _display_data_write = Unix.pipe () in
   (* This has to be called before starting the async scheduler. *)
   match Unix.fork () with
   | `In_the_child ->
@@ -93,6 +99,13 @@ let spawn kernel_module =
     let writer =
       Fd.create Char worker_in_write (Info.of_string "worker-in-write") |> Writer.create
     in
+    let display_data_reader =
+      Fd.create Char display_data_read (Info.of_string "display-data-read")
+      |> Reader.create
+    in
+    let display_data_next () =
+      Reader.read_bin_prot display_data_reader bin_reader_display_data_output
+    in
     Async.upon (Reader.close_finished stdout_reader) (fun () ->
         Log.Global.error "worker process connection closed";
         Async.shutdown 1);
@@ -101,6 +114,7 @@ let spawn kernel_module =
     ; writer
     ; stdout_reader
     ; stderr_reader
+    ; display_data_next
     ; sequencer = Async.Sequencer.create ()
     }
 
@@ -130,3 +144,4 @@ let complete t ~code =
 let stdout_reader t = t.stdout_reader
 let stderr_reader t = t.stderr_reader
 let pid t = t.pid
+let display_data t = t.display_data_next ()

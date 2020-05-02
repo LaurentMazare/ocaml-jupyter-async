@@ -54,7 +54,8 @@ module Display_data_content : sig
         ; mime : string
         ; data : string
         }
-  [@@deriving sexp]
+    | Text of string
+  [@@deriving sexp, bin_io]
 end
 
 module Status_content : sig
