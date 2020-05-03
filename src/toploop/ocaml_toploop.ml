@@ -20,8 +20,11 @@ let set_topfind () =
     "require"
     (Toploop.Directive_string
        (fun str ->
-         let packages = String.split_on_chars str ~on:[ ' '; '\r'; '\n'; ','; '\t' ] in
-         Findlib.package_deep_ancestors !Topfind.predicates packages |> Topfind.load));
+         try
+           let packages = String.split_on_chars str ~on:[ ' '; '\r'; '\n'; ','; '\t' ] in
+           Findlib.package_deep_ancestors !Topfind.predicates packages |> Topfind.load
+         with
+         | exn -> F.eprintf "error processing require %s: %s\n%!" str (Exn.to_string exn)));
   Topfind.add_predicates [ "byte"; "toploop" ];
   Topdirs.dir_directory (Findlib.package_directory "findlib")
 
@@ -113,3 +116,5 @@ let toploop_eval str =
   with
   | Caml.Sys.Break -> Or_error.error_string "interrupted by the user"
   | exn -> Or_error.error_string (exn_to_string exn ~code:str)
+
+let set_value str obj = Toploop.setvalue str (Caml.Obj.repr obj)

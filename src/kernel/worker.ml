@@ -29,8 +29,28 @@ type t =
   ; sequencer : unit Async.Sequencer.t
   }
 
-let worker (module K : Kernel_intf.S) ~worker_in_read ~worker_out_write =
-  let kernel = K.create () in
+let write_display_data display_data_write =
+  let out_channel = Unix.out_channel_of_descr display_data_write in
+  fun dd ->
+    let bigstring =
+      Bigstring.create
+        (Bin_prot.Utils.size_header_length + bin_writer_display_data_output.size dd)
+    in
+    let _w = Bigstring.write_bin_prot bigstring bin_writer_display_data_output dd in
+    let dd = Bigstring.to_string bigstring in
+    Out_channel.output_string out_channel dd;
+    Out_channel.flush out_channel
+
+let worker
+    (module K : Kernel_intf.S)
+    ~worker_in_read
+    ~worker_out_write
+    ~display_data_write
+  =
+  let context =
+    { Kernel_intf.write_display_data = write_display_data display_data_write }
+  in
+  let kernel = K.create context in
   let unpack_buffer =
     Unpack_buffer.Unpack_one.create_bin_prot bin_reader_worker_input
     |> Unpack_buffer.create
@@ -71,7 +91,7 @@ let spawn kernel_module =
   let worker_out_read, worker_out_write = Unix.pipe () in
   let stdout_read, stdout_write = Unix.pipe () in
   let stderr_read, stderr_write = Unix.pipe () in
-  let display_data_read, _display_data_write = Unix.pipe () in
+  let display_data_read, display_data_write = Unix.pipe () in
   (* This has to be called before starting the async scheduler. *)
   match Unix.fork () with
   | `In_the_child ->
@@ -81,7 +101,7 @@ let spawn kernel_module =
     Unix.dup2 ~src:stderr_write ~dst:Unix.stderr;
     Unix.close stdout_write;
     Unix.close stderr_write;
-    worker kernel_module ~worker_in_read ~worker_out_write
+    worker kernel_module ~worker_in_read ~worker_out_write ~display_data_write
   | `In_the_parent pid ->
     List.iter
       [ worker_in_read; worker_out_write; stdout_write; stderr_write ]
