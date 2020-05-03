@@ -4,7 +4,7 @@ open Async
 let protocol_version = "5.3"
 let delimiter = "<IDS|MSG>"
 
-type 'a json_assoc = (string * 'a) list [@@deriving sexp]
+type 'a json_assoc = (string * 'a) list [@@deriving sexp, bin_io]
 
 let json_assoc_of_yojson of_yojson = function
   | `Assoc l -> List.map l ~f:(fun (key, value) -> key, of_yojson value)
@@ -213,23 +213,10 @@ end
 
 module Display_data_content = struct
   type t =
-    | Image of
-        { width : int
-        ; height : int
-        ; mime : string
-        ; data : string
-        }
-    | Text of string
-  [@@deriving sexp, bin_io]
-
-  let yojson_of_t = function
-    | Image { width; height; mime; data } ->
-      `Assoc
-        [ "data", `Assoc [ mime, `String data ]
-        ; ( "metadata"
-          , `Assoc [ mime, `Assoc [ "width", `Int width; "height", `Int height ] ] )
-        ]
-    | Text text -> `Assoc [ "data", `Assoc [ "plain/text", `String text ] ]
+    { metadata : string json_assoc
+    ; data : string json_assoc
+    }
+  [@@deriving yojson, sexp, bin_io]
 end
 
 module Status_content = struct

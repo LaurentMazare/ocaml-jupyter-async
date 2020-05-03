@@ -48,13 +48,9 @@ end
 
 module Display_data_content : sig
   type t =
-    | Image of
-        { width : int
-        ; height : int
-        ; mime : string
-        ; data : string
-        }
-    | Text of string
+    { metadata : (string * string) list
+    ; data : (string * string) list
+    }
   [@@deriving sexp, bin_io]
 end
 
